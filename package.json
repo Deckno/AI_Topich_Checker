@@ -1,10 +1,10 @@
 {
-  "name": "nodejs",
+  "name": "ai_topic_checker",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Checks if words match a given topic using Cohere API",
+  "main": "AI.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node AI.js"
   },
   "keywords": [],
   "author": "",
