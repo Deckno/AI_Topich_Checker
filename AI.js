@@ -19,7 +19,6 @@ const generationConfig = {
   topP: 0.95,
   topK: 64,
   maxOutputTokens: 2048,
-  responseMimeType: "text/plain",
 };
 
 async function run(prompt, history = []) {
