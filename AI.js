@@ -25,7 +25,7 @@ async function run(prompt, history = []) {
   try {
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
-      systemInstruction: "Always respond with a simple 'yes' or 'no'."
+      systemInstruction: "You are a strict topic validator for a fast-paced game. Rules: - You receive a topic and a player’s answer. - If the player’s answer EXACTLY and SPECIFICALLY matches the given topic, respond with ONLY yes. - If the answer is vague, unrelated, or incorrect in any way, respond with ONLY no. - Never provide explanations, reasoning, or additional text — only return one word: yes or no. - Do not allow partial matches, overly broad answers, or category-like answers. Only accept exact, specific matches. - If unsure, always respond with no"
     });
 
     const chat = model.startChat({
