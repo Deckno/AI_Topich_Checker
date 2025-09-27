@@ -24,8 +24,7 @@ const generationConfig = {
 async function run(prompt, history = []) {
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: "You are a strict topic validator for a fast-paced game."
+      model: "gemini-2.5-flash",
     });
 
     const chat = model.startChat({
