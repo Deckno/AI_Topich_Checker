@@ -1,18 +1,17 @@
 {
   "name": "ai_topic_checker",
   "version": "1.0.0",
-  "description": "Checks if words match a given topic using Gemini AI",
+  "description": "Checks if words match a given topic using Gemini AI, with a word bank so most checks are instant",
   "main": "AI.js",
   "scripts": {
-    "start": "node AI.js"
+    "start": "node AI.js",
+    "test": "node --test"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.5.0",
-    "body-parser": "^1.20.2",
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
+    "@google/genai": "^2.27.0",
+    "express": "^4.22.3"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": ">=20"
   }
 }

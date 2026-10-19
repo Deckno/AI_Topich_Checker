@@ -1,66 +1,95 @@
+const path = require("path");
 const express = require("express");
-const bodyParser = require("body-parser");
+const { GoogleGenAI, ThinkingLevel } = require("@google/genai");
+const { createTopicChecker, normalize } = require("./topicChecker");
 
-// ✅ Load node-fetch and polyfill global fetch
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
-globalThis.fetch = fetch;
-
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const app = express();
-const PORT = 3000;
-app.use(bodyParser.json());
+const PORT = process.env.PORT || 3000;
+app.use(express.json());
 
 // ✅ Gemini AI setup
-const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+// gemini-2.5-flash was retired, and it "thinks" before every answer, which
+// made each check slow. Flash-Lite with minimal thinking is Google's fastest model.
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Correct config object
-const generationConfig = {
-  temperature: 0,
-  topP: 0.95,
-  topK: 64,
-  maxOutputTokens: 2048,
+const baseConfig = {
+  thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
 };
 
-async function run(prompt, history = []) {
-  try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-    });
-
-    const chat = model.startChat({
-      generationConfig,
-      history,
-    });
-
-    console.log("[User Prompt]:", prompt);
-    
-    const result = await chat.sendMessage(prompt);
-    const text = await result.response.text();
-    
-    console.log("[Gemini Response]:", text);
-    return { success: true, text };
-  } catch (error) {
-    console.error("[Gemini Error]:", error);
-    return { success: false };
-  }
+async function generate({ prompt, system, schema, timeoutMs }) {
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: prompt,
+    config: {
+      ...baseConfig,
+      systemInstruction: system,
+      ...(schema && { responseMimeType: "application/json", responseJsonSchema: schema }),
+      abortSignal: AbortSignal.timeout(timeoutMs),
+    },
+  });
+  return response.text;
 }
 
+const checker = createTopicChecker({
+  generate,
+  bankDir: path.join(__dirname, "word-banks"),
+});
+
+function readText(value, maxLength) {
+  return typeof value === "string" && normalize(value) && value.length <= maxLength ? value : null;
+}
+
+// Call when a topic is picked (e.g. during the round countdown). It builds a
+// word bank so that the checks during the round are instant.
+app.post("/topic", async (req, res) => {
+  const topic = readText(req.body.topic, 80);
+  if (!topic) return res.status(400).json({ error: "Invalid or missing topic." });
+
+  const started = Date.now();
+  try {
+    const { words } = await checker.prepareTopic(topic);
+    res.json({ ready: true, words, ms: Date.now() - started });
+  } catch {
+    // Checks still work without a bank, they just ask Gemini every time.
+    res.status(503).json({ ready: false, ms: Date.now() - started });
+  }
+});
+
+// Call for every answer. Responds with { valid, source, ms }.
+app.post("/check", async (req, res) => {
+  const topic = readText(req.body.topic, 80);
+  const word = typeof req.body.word === "string" && req.body.word.length <= 50 ? req.body.word : null;
+  if (!topic || word === null) {
+    return res.status(400).json({ error: "Invalid or missing topic or word." });
+  }
+
+  const started = Date.now();
+  const result = await checker.check(topic, word);
+  console.log(`[Check] ${topic} / ${word} -> ${result.valid} (${result.source}, ${Date.now() - started}ms)`);
+  res.json({ ...result, ms: Date.now() - started });
+});
+
+// Old endpoint the game used before /topic and /check: sends any prompt
+// straight to Gemini. Kept so the current game keeps working; remove it once
+// the game uses /check, since anyone can use it to run prompts on your key.
 app.post("/", async (req, res) => {
   const { prompt, history } = req.body;
 
-  if (!prompt || typeof prompt !== 'string') {
+  if (!prompt || typeof prompt !== "string") {
     return res.status(400).send("Invalid or missing prompt.");
   }
 
-  const result = await run(prompt, history);
-
-  if (result.success) {
-    res.status(200).send(result.text);
-  } else {
+  try {
+    const chat = ai.chats.create({ model: MODEL, history, config: baseConfig });
+    const response = await chat.sendMessage({ message: prompt });
+    res.status(200).send(response.text);
+  } catch (error) {
+    console.error("[Gemini Error]:", error);
     res.status(500).send("Server Error");
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT} using ${MODEL}`);
 });
